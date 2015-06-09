@@ -2,7 +2,6 @@ package neuralnet
 
 import (
 	"github.com/gonum/matrix/mat64"
-	"math"
 )
 
 // TODO: make this more generic? Separate NN implementations for categorization vs. calculation?
@@ -20,7 +19,7 @@ type NeuralNet struct {
 func NewNeuralNet(nodes []int) NeuralNet {
 	t := make([]Matrix, len(nodes)-1)
 	for i := 1; i < len(nodes); i++ {
-		t[i-1] = Rand(nodes[i], nodes[i-1]+1)
+		t[i-1] = NewRand(nodes[i], nodes[i-1]+1)
 	}
 	nn := NeuralNet{Thetas: t}
 	return nn
@@ -50,7 +49,7 @@ func (nn *NeuralNet) Calculate(input Matrix) Matrix {
 
 		//X = [ones(m, 1) X];
 		rows, _ := a.Dims()
-		ones := Ones(rows, 1)
+		ones := NewOnes(rows, 1)
 		x.Augment(ones, a)
 
 		//A2 = sigmoid(X * Theta1'); <-- Transpose, multiply, Apply sigmoid
@@ -103,9 +102,8 @@ func (nn *NeuralNet) CalculatedValues() Matrix {
 // through to the output layer), as in the list of Thetas in
 // the network itself
 func (nn *NeuralNet) CalculateCost(examples Matrix, answers Matrix, lambda float64) (cost float64, gradients []Matrix) {
-	cost = nn.feedForward(examples, answers, lambda)
 
-	// TODO
+	cost = nn.feedForward(examples, answers, lambda)
 	gradients = nn.backpropagation(examples, answers, nn.CalculatedValues(), lambda)
 
 	return cost, gradients
@@ -121,14 +119,14 @@ func (nn *NeuralNet) feedForward(examples Matrix, answers Matrix, lambda float64
 	var leftHand, all mat64.Dense
 	var rightHand, zeroMinusAnswers, oneMinusAnswers Matrix
 
-	zeroMinusAnswers = Zeroes(rows, cols)
+	zeroMinusAnswers = NewZeroes(rows, cols)
 	zeroMinusAnswers.Sub(zeroMinusAnswers, answers)
 	leftHand.Apply(Log, calculated)
 	leftHand.MulElem(zeroMinusAnswers, &leftHand)
 
-	oneMinusAnswers = Ones(rows, cols)
+	oneMinusAnswers = NewOnes(rows, cols)
 	oneMinusAnswers.Sub(oneMinusAnswers, answers)
-	rightHand = Ones(calculated.Dims())
+	rightHand = NewOnes(calculated.Dims())
 	rightHand.Sub(rightHand, calculated)
 	rightHand.Apply(Log, rightHand)
 	rightHand.MulElem(oneMinusAnswers, rightHand)
@@ -187,7 +185,7 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 			outputsTranspose.TCopy(nn.Outputs[j].RowView(i))
 
 			//a2 = [1 a2];
-			ones := Ones(1, 1)
+			ones := NewOnes(1, 1)
 			outputsTransposeAugmented.Augment(ones, &outputsTranspose)
 
 			//Theta1_grad = Theta1_grad + (delta2(2:end)' * a1);
@@ -199,7 +197,7 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 
 		//z2 = [1 z2];
 		zRows, _ := nn.Zs[j].Dims()
-		zAugOnes := Ones(zRows, 1)
+		zAugOnes := NewOnes(zRows, 1)
 		zAugmented.Augment(zAugOnes, nn.Zs[j])
 
 		// delta2 = (delta3*Theta2) .* sigmoidGradient(z2);
@@ -216,7 +214,7 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 	//Theta2_grad = Theta2_grad / m;
 	for _, thetaGrad := range gradients {
 		r, c := thetaGrad.Dims()
-		m := ForValue(r, c, float64(inputRows))
+		m := NewForValue(r, c, float64(inputRows))
 		thetaGrad.DivElem(thetaGrad, m)
 	}
 
@@ -226,7 +224,7 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 	//Theta2_grad = Theta2_grad + ((lambda/m) * RegTheta2);
 	for i, thetaGrad := range gradients {
 		r, c := thetaGrad.Dims()
-		m := ForValue(r, c, lambda/float64(inputRows))
+		m := NewForValue(r, c, lambda/float64(inputRows))
 		var regTheta mat64.Dense
 		regTheta.MulElem(nn.Thetas[i], m)
 		zeroVals := make([]float64, r)
@@ -240,30 +238,7 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 func (nn *NeuralNet) newGradients() []Matrix {
 	gradients := make([]Matrix, len(nn.Thetas))
 	for i, layer := range nn.Thetas {
-		gradients[i] = Zeroes(layer.Dims())
+		gradients[i] = NewZeroes(layer.Dims())
 	}
 	return gradients
-}
-
-// The following functions can be passed to a mat64.Applyer as an ApplyFunc
-
-// Calculate the sigmoid of a matrix cell
-func Sigmoid(r, c int, z float64) float64 {
-	return 1.0 / (1.0 + math.Exp(-z))
-}
-
-// Calculate the gradient of the sigmoid of a matrix cell
-func SigmoidGradient(r, c int, z float64) float64 {
-	s := Sigmoid(r, c, z)
-	return s * (1 - s)
-}
-
-// Calculate the log of a matrix cell
-func Log(r, c int, z float64) float64 {
-	return math.Log(z)
-}
-
-// Calculate the square of a matrix cell
-func Square(r, c int, z float64) float64 {
-	return math.Pow(z, 2)
 }

@@ -2,6 +2,7 @@ package neuralnet
 
 import (
 	"github.com/gonum/matrix/mat64"
+	"math"
 	"math/rand"
 )
 
@@ -27,7 +28,7 @@ func Prepend(sl []float64, val float64) []float64 {
 	return append(valSl, sl...)
 }
 
-func Zeroes(rows, cols int) Matrix {
+func NewZeroes(rows, cols int) Matrix {
 	zeroes := make([]float64, rows*cols)
 	for i, _ := range zeroes {
 		zeroes[i] = 0
@@ -36,7 +37,7 @@ func Zeroes(rows, cols int) Matrix {
 	return m
 }
 
-func Ones(rows, cols int) Matrix {
+func NewOnes(rows, cols int) Matrix {
 	ones := make([]float64, rows*cols)
 	for i, _ := range ones {
 		ones[i] = 1
@@ -45,7 +46,7 @@ func Ones(rows, cols int) Matrix {
 	return m
 }
 
-func Rand(rows, cols int) Matrix {
+func NewRand(rows, cols int) Matrix {
 	rands := make([]float64, rows*cols)
 	for i, _ := range rands {
 		rands[i] = rand.Float64()
@@ -55,11 +56,34 @@ func Rand(rows, cols int) Matrix {
 }
 
 // TODO: turn this into a function that returns a function (via closure)
-func ForValue(rows, cols int, val float64) Matrix {
+func NewForValue(rows, cols int, val float64) Matrix {
 	vals := make([]float64, rows*cols)
 	for i, _ := range vals {
 		vals[i] = val
 	}
 	m := mat64.NewDense(rows, cols, vals)
 	return m
+}
+
+// The following functions can be passed to a mat64.Applyer as an ApplyFunc
+
+// Calculate the sigmoid of a matrix cell
+func Sigmoid(r, c int, z float64) float64 {
+	return 1.0 / (1.0 + math.Exp(-z))
+}
+
+// Calculate the gradient of the sigmoid of a matrix cell
+func SigmoidGradient(r, c int, z float64) float64 {
+	s := Sigmoid(r, c, z)
+	return s * (1 - s)
+}
+
+// Calculate the log of a matrix cell
+func Log(r, c int, z float64) float64 {
+	return math.Log(z)
+}
+
+// Calculate the square of a matrix cell
+func Square(r, c int, z float64) float64 {
+	return math.Pow(z, 2)
 }
