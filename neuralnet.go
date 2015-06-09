@@ -177,7 +177,6 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 
 	var delta mat64.Matrix
 	delta = mat64.DenseCopyOf(&errors)
-	ones := Ones(1, 1)
 
 	for j := len(nn.Thetas) - 2; j >= 0; j-- {
 		var deltaTranspose mat64.Dense
@@ -199,7 +198,9 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 		var nextDelta, zAugmented, sigmoidGradient mat64.Dense
 
 		//z2 = [1 z2];
-		zAugmented.Augment(ones, nn.Zs[j])
+		zRows, _ := nn.Zs[j].Dims()
+		zAugOnes := Ones(zRows, 1)
+		zAugmented.Augment(zAugOnes, nn.Zs[j])
 
 		// delta2 = (delta3*Theta2) .* sigmoidGradient(z2);
 		sigmoidGradient.Apply(SigmoidGradient, &zAugmented)
