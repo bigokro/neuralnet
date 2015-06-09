@@ -10,7 +10,7 @@ import (
 
 func assertMatrixEquals(t *testing.T, expected, actual Matrix) {
 	if !actual.Equals(expected) {
-		fmt.Printf(">>Expected %+v but got %+v<<\n", expected, actual)
+		fmt.Printf(">>Expected: %+v\nBut got: %+v<<\n", expected, actual)
 		t.Fail()
 	}
 }
@@ -101,6 +101,93 @@ func TestFeedForward(t *testing.T) {
 	assertFloat64Equals(t, expected, result)
 
 	// TODO: NewTestMultipleInputs (Matrix)
+}
+
+func TestBackpropagate(t *testing.T) {
+	nn := NewTestNeuralNet()
+	input := NewTestInput()
+	answers := mat64.NewDense(1, 4, []float64{0, 1, 0, 0})
+	lambda := 3.0
+	nn.feedForward(input, answers, lambda)
+	result := nn.backpropagation(input, answers, nn.CalculatedValues(), lambda)
+	assertTrue(
+		t,
+		len(result) == 3,
+		fmt.Sprintf("Expected backpropagation to return three gradients"),
+	)
+	expected := make([]Matrix, 3)
+	expected[0] = mat64.NewDense(5, 11, []float64{
+		0, -0.12, 0.78, 0.006, -0.99, -0.12, 1.53, 0.07200000000000001, -0.36, 0.627, 0.369,
+		0, 0.765, -0.15000000000000002, 0.396, 0.249, -0.12, 0.003, 0.399, 1.119, -0.06, -1.59,
+		0, 1.287, 2.4000000000000004, 0.078, 0.9630000000000001, 0.942, 0.8340000000000001, -1.77, 0.5429999999999999, 0.9690000000000001, -1.35,
+		0, 1.137, 1.1099999999999999, -0.24, 2.943, 0.10500000000000001, -0.75, 0.5249999999999999, 0.324, 1.3860000000000001, 2.403,
+		0, 0.41700000000000004, 0.9810000000000001, -2.91, 2.208, 2.7720000000000002, 0.099, -2.25, -2.9699999999999998, 2.757, -0.9299999999999999,
+	})
+	expected[1] = mat64.NewDense(5, 6, []float64{
+		-0.04445469259511377, -0.3545661229392681, 0.044160414835666226, -0.9820475409905005, -0.11403056461892552, 0.07299739839626156,
+		-0.01385434397512419, -1.6576560537812204, -0.6077412785237413, -0.6068711355057627, 1.1895108534394943, -1.477168780984349,
+		0.1316909030292129, 2.841773755141307, -0.5564161506872797, 2.5493128030612393, -0.7988127626077433, 0.7221420385651367,
+		0.14399032593002323, 0.4635705434537417, 0.08345629729924436, -2.6885872328014555, -2.3521641489397704, -1.2454937576033351,
+		-0.032529947379592174, 1.4310236146088473, 0.017823507234970944, -0.3461334002419627, 0.3154155121333252, -0.013832270702634004,
+	})
+	expected[2] = mat64.NewDense(4, 6, []float64{
+		0.6192085632020828, 0.014854000676620072, 0.2747535398629969, 3.2344254669872865, 0.8608165596394972, 0.3409476659182792,
+		-0.19706099990173265, 2.683251397942523, 2.4245153686904675, -0.7181200573679938, -1.5025513719225456, 2.833947178541823,
+		0.5736790525986135, 0.6194973844837481, -1.8482281051109348, 0.19120340515929668, 0.9594332383764645, 0.6466724202378563,
+		0.6110766841737599, 0.40932513724903175, 2.7701846827072485, 1.1583131749113027, 1.444997353603017, 0.39907612226667477,
+	})
+	for i, r := range result {
+		assertMatrixEquals(t, expected[i], r)
+	}
+
+	// TODO: NewTestMultipleInputs (Matrix)
+}
+
+func TestSigmoid(t *testing.T) {
+	expected := 0.5
+	result := Sigmoid(0, 0, 0)
+	assertFloat64Equals(t, expected, result)
+
+	result = Sigmoid(1, 1, 0)
+	assertFloat64Equals(t, expected, result)
+
+	result = Sigmoid(5, 43, 0)
+	assertFloat64Equals(t, expected, result)
+
+	expected = 0.7310585786300049
+	result = Sigmoid(0, 0, 1)
+	assertFloat64Equals(t, expected, result)
+
+	expected = 0.2689414213699951
+	result = Sigmoid(0, 0, -1)
+	assertFloat64Equals(t, expected, result)
+
+	expected = 1.0
+	result = Sigmoid(0, 0, 10000)
+	assertFloat64Equals(t, expected, result)
+}
+
+func TestSigmoidGradient(t *testing.T) {
+	expected := 0.2500
+	result := SigmoidGradient(0, 0, 0)
+	assertFloat64Equals(t, expected, result)
+
+	result = SigmoidGradient(1, 1, 0)
+	assertFloat64Equals(t, expected, result)
+
+	result = SigmoidGradient(5, 43, 0)
+	assertFloat64Equals(t, expected, result)
+
+	expected = 0.19661193324148185
+	result = SigmoidGradient(0, 0, 1)
+	assertFloat64Equals(t, expected, result)
+
+	result = SigmoidGradient(0, 0, -1)
+	assertFloat64Equals(t, expected, result)
+
+	expected = 0
+	result = SigmoidGradient(0, 0, 10000)
+	assertFloat64Equals(t, expected, result)
 }
 
 // Utility functions

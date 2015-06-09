@@ -7,7 +7,9 @@ import (
 
 // TODO: make this more generic? Separate NN implementations for categorization vs. calculation?
 type NeuralNet struct {
-	Thetas []Matrix
+	Thetas  []Matrix
+	Zs      []Matrix // Intermediate calculations, pre-sigmoid (Z(n+1) = A(n) * Theta(n)')
+	Outputs []Matrix // Calculated values, post-sigmoid (Output(n) = Sigmoid(Z(n))
 }
 
 // Creates a new NeuralNet
@@ -39,8 +41,11 @@ func (nn *NeuralNet) NumOutputs() int {
 // Activates the network for the given inputs.
 // Returns the calculated confidence scores as a matrix
 func (nn *NeuralNet) Calculate(input Matrix) Matrix {
+	nn.Zs = make([]Matrix, len(nn.Thetas))
+	nn.Outputs = make([]Matrix, len(nn.Thetas))
+
 	a := mat64.DenseCopyOf(input)
-	for _, th := range nn.Thetas {
+	for i, th := range nn.Thetas {
 		var x, z mat64.Dense
 
 		//X = [ones(m, 1) X];
@@ -54,7 +59,10 @@ func (nn *NeuralNet) Calculate(input Matrix) Matrix {
 		thT.TCopy(th)
 
 		z.Mul(&x, thT)
+		nn.Zs[i] = mat64.DenseCopyOf(&z)
+
 		z.Apply(Sigmoid, &z)
+		nn.Outputs[i] = mat64.DenseCopyOf(&z)
 
 		a = &z
 	}
@@ -81,6 +89,10 @@ func (nn *NeuralNet) Categorize(input []float64) int {
 	return best
 }
 
+func (nn *NeuralNet) CalculatedValues() Matrix {
+	return nn.Outputs[len(nn.Outputs)-1]
+}
+
 // Calculate Cost is the Cost Function for the neural network
 // Each call to this method represents a single training step
 // in a process of Gradient Descent (or related algorithms)
@@ -91,22 +103,12 @@ func (nn *NeuralNet) Categorize(input []float64) int {
 // through to the output layer), as in the list of Thetas in
 // the network itself
 func (nn *NeuralNet) CalculateCost(examples Matrix, answers Matrix, lambda float64) (cost float64, gradients []Matrix) {
-	gradients = NewGradients(nn.Thetas)
-
 	cost = nn.feedForward(examples, answers, lambda)
 
 	// TODO
+	gradients = nn.backpropagation(examples, answers, nn.CalculatedValues(), lambda)
 
 	return cost, gradients
-}
-
-func NewGradients(thetas []Matrix) []Matrix {
-	gradients := make([]Matrix, len(thetas))
-	for i, layer := range thetas {
-		r, c := layer.Dims()
-		gradients[i] = mat64.NewDense(r, c, nil)
-	}
-	return gradients
 }
 
 func (nn *NeuralNet) feedForward(examples Matrix, answers Matrix, lambda float64) (cost float64) {
@@ -164,11 +166,95 @@ func (nn *NeuralNet) feedForward(examples Matrix, answers Matrix, lambda float64
 	return cost
 }
 
+func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculations Matrix, lambda float64) []Matrix {
+	gradients := nn.newGradients()
+
+	// delta3 = a3 - y;
+	var errors mat64.Dense
+	errors.Sub(calculations, answers)
+
+	inputRows, _ := examples.Dims()
+
+	var delta mat64.Matrix
+	delta = mat64.DenseCopyOf(&errors)
+	ones := Ones(1, 1)
+
+	for j := len(nn.Thetas) - 2; j >= 0; j-- {
+		var deltaTranspose mat64.Dense
+		deltaTranspose.TCopy(delta)
+
+		for i := 0; i < inputRows; i++ {
+			var thetaGrad, outputsTranspose, outputsTransposeAugmented mat64.Dense
+			outputsTranspose.TCopy(nn.Outputs[j].RowView(i))
+
+			//a2 = [1 a2];
+			ones := Ones(1, 1)
+			outputsTransposeAugmented.Augment(ones, &outputsTranspose)
+
+			//Theta1_grad = Theta1_grad + (delta2(2:end)' * a1);
+			thetaGrad.Mul(deltaTranspose.ColView(i), &outputsTransposeAugmented)
+			gradients[j+1].Add(gradients[j+1], &thetaGrad)
+		}
+
+		var nextDelta, zAugmented, sigmoidGradient mat64.Dense
+
+		//z2 = [1 z2];
+		zAugmented.Augment(ones, nn.Zs[j])
+
+		// delta2 = (delta3*Theta2) .* sigmoidGradient(z2);
+		sigmoidGradient.Apply(SigmoidGradient, &zAugmented)
+
+		nextDelta.Mul(delta, nn.Thetas[j+1])
+		nextDelta.MulElem(&nextDelta, &sigmoidGradient)
+
+		ndRows, ndCols := nextDelta.Dims()
+		delta = nextDelta.View(0, 1, ndRows, ndCols-1)
+		//delta = &nextDelta
+	}
+
+	//Theta2_grad = Theta2_grad / m;
+	for _, thetaGrad := range gradients {
+		r, c := thetaGrad.Dims()
+		m := ForValue(r, c, float64(inputRows))
+		thetaGrad.DivElem(thetaGrad, m)
+	}
+
+	// Regularization
+	//RegTheta2 = Theta2;
+	//RegTheta2(:,1) = 0;
+	//Theta2_grad = Theta2_grad + ((lambda/m) * RegTheta2);
+	for i, thetaGrad := range gradients {
+		r, c := thetaGrad.Dims()
+		m := ForValue(r, c, lambda/float64(inputRows))
+		var regTheta mat64.Dense
+		regTheta.MulElem(nn.Thetas[i], m)
+		zeroVals := make([]float64, r)
+		regTheta.SetCol(0, zeroVals)
+		thetaGrad.Add(thetaGrad, &regTheta)
+	}
+
+	return gradients
+}
+
+func (nn *NeuralNet) newGradients() []Matrix {
+	gradients := make([]Matrix, len(nn.Thetas))
+	for i, layer := range nn.Thetas {
+		gradients[i] = Zeroes(layer.Dims())
+	}
+	return gradients
+}
+
 // The following functions can be passed to a mat64.Applyer as an ApplyFunc
 
 // Calculate the sigmoid of a matrix cell
 func Sigmoid(r, c int, z float64) float64 {
 	return 1.0 / (1.0 + math.Exp(-z))
+}
+
+// Calculate the gradient of the sigmoid of a matrix cell
+func SigmoidGradient(r, c int, z float64) float64 {
+	s := Sigmoid(r, c, z)
+	return s * (1 - s)
 }
 
 // Calculate the log of a matrix cell
