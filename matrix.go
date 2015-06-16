@@ -49,7 +49,7 @@ func NewOnes(rows, cols int) Matrix {
 func NewRand(rows, cols int) Matrix {
 	rands := make([]float64, rows*cols)
 	for i, _ := range rands {
-		rands[i] = rand.Float64()
+		rands[i] = (rand.Float64() * 2) - 1.0
 	}
 	m := mat64.NewDense(rows, cols, rands)
 	return m

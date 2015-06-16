@@ -1,6 +1,7 @@
 package neuralnet
 
 import (
+	"fmt"
 	"github.com/gonum/matrix/mat64"
 )
 
@@ -25,7 +26,7 @@ func NewNeuralNet(nodes []int) NeuralNet {
 	return nn
 }
 
-// Returns the number of float64s expected as inputs to the calculation (number of input nodes)
+// Returns the number of floats expected as inputs to the calculation (number of input nodes)
 func (nn *NeuralNet) NumInputs() int {
 	_, cols := nn.Thetas[0].Dims()
 	return cols - 1
@@ -76,20 +77,34 @@ func (nn *NeuralNet) Calculate(input Matrix) Matrix {
 func (nn *NeuralNet) Categorize(input []float64) int {
 	inputMatrix := mat64.NewDense(1, len(input), input)
 	calculation := nn.Calculate(inputMatrix)
-	results := calculation.Row(nil, 0)
-	best := 0
-	bestScore := 0.0
-	for i, score := range results {
-		if score > bestScore {
-			best = i
-			bestScore = score
-		}
-	}
-	return best
+	best := ChooseBestFromEach(calculation)
+	return best[0]
 }
 
 func (nn *NeuralNet) CalculatedValues() Matrix {
 	return nn.Outputs[len(nn.Outputs)-1]
+}
+
+func ChooseBestFromEach(outputs Matrix) []int {
+	rows, _ := outputs.Dims()
+	best := make([]int, rows)
+	for i := 0; i < rows; i++ {
+		output := outputs.Row(nil, i)
+		best[i] = ChooseBest(output)
+	}
+	return best
+}
+
+func ChooseBest(values []float64) int {
+	best := 0
+	bestScore := 0.0
+	for i, value := range values {
+		if value > bestScore {
+			best = i
+			bestScore = value
+		}
+	}
+	return best
 }
 
 // Calculate Cost is the Cost Function for the neural network
@@ -241,4 +256,96 @@ func (nn *NeuralNet) newGradients() []Matrix {
 		gradients[i] = NewZeroes(layer.Dims())
 	}
 	return gradients
+}
+
+// Trains the network on the given inputs and expected results
+// The inputs and expected slices can be any length, but must be of the same size
+// Each pair of input/expected corresponds to a training, testing or validation data set
+// Only the first pair will be used for training
+//
+// The algorithm continues training until the max number of iterations has been reached,
+// or until the cost is below the max cost on the training set,
+// and the accuracy is above the min percent accuracy (from 0 to 1) for ALL the provided sets
+//
+// Training will change the Thetas of the neural net.
+// The function returns a slice with the percent accuracy (from 0 to 1) of each corresponding training set
+func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, lambda float64, maxCost float64, minPercentAccuracy float64, maxIterations int) []float64 {
+	var percentAccuracies []float64
+	trainingInputs := inputs[0]
+	trainingExpected := expected[0]
+	for i := 0; i < maxIterations; i++ {
+		cost, grads := nn.CalculateCost(trainingInputs, trainingExpected, lambda)
+		fmt.Printf("Iteration %v - Cost: %v\n", i, cost)
+
+		if cost <= maxCost {
+			percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
+			accurate := true
+			for _, percent := range percentAccuracies {
+				if percent < minPercentAccuracy {
+					accurate = false
+				}
+			}
+			fmt.Println("Accuracy: ", percentAccuracies)
+			if accurate {
+				break
+			}
+
+		}
+
+		for j, grad := range grads {
+			// TODO: optimize performance using ApplyFunc instead of MulElem?
+			gradRows, gradCols := grad.Dims()
+			alphaMatrix := NewForValue(gradRows, gradCols, alpha)
+			grad.MulElem(grad, alphaMatrix)
+			nn.Thetas[j].Sub(nn.Thetas[j], grad)
+		}
+	}
+
+	if percentAccuracies == nil {
+		percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
+	}
+
+	return percentAccuracies
+}
+
+func (nn *NeuralNet) calculatePercentAccuracies(inputs, expected []Matrix) []float64 {
+	percentAccuracies := make([]float64, len(inputs))
+	for i := 0; i < len(inputs); i++ {
+		inputData := inputs[i]
+		expectedData := expected[i]
+		calculatedData := nn.Calculate(inputData)
+		results := ChooseBestFromEach(calculatedData)
+		expectedResults := ChooseBestFromEach(expectedData)
+		percentAccuracies[i] = PercentCorrect(expectedResults, results)
+		fmt.Println("Expected has: ", len(expectedResults), " actual has: ", len(results))
+
+		var tabulation [16][16]int
+		for j := 0; j < len(results); j++ {
+			tabulation[expectedResults[j]][results[j]]++
+			//fmt.Println(calculatedData.RowView(j))
+			//fmt.Println("Expected: ", expectedResults[j], " was: ", results[j])
+		}
+		fmt.Println("Tabulations: ")
+		for j := 0; j < len(tabulation); j++ {
+			for k := 0; k < len(tabulation); k++ {
+				fmt.Print("\t", tabulation[j][k])
+			}
+			fmt.Print("\n")
+		}
+
+	}
+
+	return percentAccuracies
+}
+
+func PercentCorrect(expected, actual []int) float64 {
+	correct := 0
+	for k, result := range actual {
+
+		if result == expected[k] {
+			correct++
+		}
+	}
+	fmt.Printf("%v correct out of %v\n", correct, len(actual))
+	return float64(correct) / float64(len(actual))
 }

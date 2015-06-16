@@ -24,6 +24,13 @@ func assertFloat64Equals(t *testing.T, expected, actual float64) {
 	}
 }
 
+func assertIntEquals(t *testing.T, expected, actual int) {
+	if expected != actual {
+		fmt.Printf(">>Expected %+v but got %+v<<\n", expected, actual)
+		t.Fail()
+	}
+}
+
 func assertTrue(t *testing.T, istrue bool, msg string) {
 	if !istrue {
 		fmt.Println(msg)
@@ -176,6 +183,62 @@ func TestCalculateCost(t *testing.T) {
 	assertFloat64Equals(t, expectedCost, resultCost)
 	for i, r := range resultGradients {
 		assertMatrixEquals(t, expectedGradients[i], r)
+	}
+}
+
+func TestPercentCorrect(t *testing.T) {
+	expected := []int{1, 2, 3, 4, 5}
+	actual := []int{1, 2, 3, 4, 0}
+	expectedPercent := 0.80
+	actualPercent := PercentCorrect(expected, actual)
+	assertFloat64Equals(t, expectedPercent, actualPercent)
+
+	expected = []int{1, 2, 3, 4, 5, 6, 7}
+	actual = []int{1, 2, 3, 4, 0, 0, 7}
+	expectedPercent = 5.0 / 7.0
+	actualPercent = PercentCorrect(expected, actual)
+	assertFloat64Equals(t, expectedPercent, actualPercent)
+
+	expected = []int{1, 2, 3, 4, 5, 6, 7}
+	actual = []int{0, 0, 0, 0, 0, 0, 0}
+	expectedPercent = 0
+	actualPercent = PercentCorrect(expected, actual)
+	assertFloat64Equals(t, expectedPercent, actualPercent)
+}
+
+func TestChooseBest(t *testing.T) {
+	values := []float64{0.1, 0.9, 0.3, 0.4, 0.5}
+	expected := 1
+	actual := ChooseBest(values)
+	assertIntEquals(t, expected, actual)
+
+	values = []float64{-0.1, -0.9, -0.3, 0.4, 0.5}
+	expected = 4
+	actual = ChooseBest(values)
+	assertIntEquals(t, expected, actual)
+
+	values = []float64{
+		0.21897700730174297, 0.09133133358142083, 0.17227162520454053, 0.06044174984655499, 0.21090492917285905,
+		0.012962172064862833, 0.03200441933329224, 0.0030343957738069895, 0.010059393050123757, 0.03693911166947474,
+		0.1444435492513144, 0.1525085746435154, 0.008912377810902893, 0.0035007009243766436, 0.11039837873827689, 0.011632145607755892,
+	}
+	expected = 0
+	actual = ChooseBest(values)
+	assertIntEquals(t, expected, actual)
+}
+
+func TestChooseBestFromEach(t *testing.T) {
+	values := mat64.NewDense(
+		2,
+		5,
+		[]float64{
+			0.1, 0.9, 0.3, 0.4, 0.5,
+			-0.1, -0.9, -0.3, 0.4, 0.5,
+		})
+	expected := []int{1, 4}
+	actual := ChooseBestFromEach(values)
+	for i, expectedVal := range expected {
+		assertIntEquals(t, expectedVal, actual[i])
 	}
 }
 
