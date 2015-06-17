@@ -65,6 +65,17 @@ func NewForValue(rows, cols int, val float64) Matrix {
 	return m
 }
 
+// TODO: Test this
+func MatrixToSlice(m Matrix) [][]float64 {
+	rows, _ := m.Dims()
+	sl := make([][]float64, rows)
+	for i := 0; i < rows; i++ {
+		var dst []float64
+		sl[i] = m.Row(dst, i)
+	}
+	return sl
+}
+
 // The following functions can be passed to a mat64.Applyer as an ApplyFunc
 
 // Calculate the sigmoid of a matrix cell

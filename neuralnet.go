@@ -2,6 +2,7 @@ package neuralnet
 
 import (
 	"fmt"
+	//"github.com/alonsovidales/go_ml"
 	"github.com/gonum/matrix/mat64"
 )
 
@@ -189,41 +190,49 @@ func (nn *NeuralNet) backpropagation(examples Matrix, answers Matrix, calculatio
 	inputRows, _ := examples.Dims()
 
 	var delta mat64.Matrix
+	// TODO: try this without the dense copy
 	delta = mat64.DenseCopyOf(&errors)
 
-	for j := len(nn.Thetas) - 2; j >= 0; j-- {
+	for i := len(nn.Thetas) - 1; i >= 0; i-- {
 		var deltaTranspose mat64.Dense
 		deltaTranspose.TCopy(delta)
 
-		for i := 0; i < inputRows; i++ {
+		for j := 0; j < inputRows; j++ {
 			var thetaGrad, outputsTranspose, outputsTransposeAugmented mat64.Dense
-			outputsTranspose.TCopy(nn.Outputs[j].RowView(i))
+			if i > 0 {
+				outputsTranspose.TCopy(nn.Outputs[i-1].RowView(j))
+			} else {
+				outputsTranspose.TCopy(examples.RowView(j))
+			}
 
 			//a2 = [1 a2];
 			ones := NewOnes(1, 1)
 			outputsTransposeAugmented.Augment(ones, &outputsTranspose)
 
 			//Theta1_grad = Theta1_grad + (delta2(2:end)' * a1);
-			thetaGrad.Mul(deltaTranspose.ColView(i), &outputsTransposeAugmented)
-			gradients[j+1].Add(gradients[j+1], &thetaGrad)
+			thetaGrad.Mul(deltaTranspose.ColView(j), &outputsTransposeAugmented)
+			gradients[i].Add(gradients[i], &thetaGrad)
 		}
 
-		var nextDelta, zAugmented, sigmoidGradient mat64.Dense
+		if i > 0 {
 
-		//z2 = [1 z2];
-		zRows, _ := nn.Zs[j].Dims()
-		zAugOnes := NewOnes(zRows, 1)
-		zAugmented.Augment(zAugOnes, nn.Zs[j])
+			var nextDelta, zAugmented, sigmoidGradient mat64.Dense
 
-		// delta2 = (delta3*Theta2) .* sigmoidGradient(z2);
-		sigmoidGradient.Apply(SigmoidGradient, &zAugmented)
+			//z2 = [1 z2];
+			zRows, _ := nn.Zs[i].Dims()
+			zAugOnes := NewOnes(zRows, 1)
+			zAugmented.Augment(zAugOnes, nn.Zs[i-1])
 
-		nextDelta.Mul(delta, nn.Thetas[j+1])
-		nextDelta.MulElem(&nextDelta, &sigmoidGradient)
+			// delta2 = (delta3*Theta2) .* sigmoidGradient(z2);
+			sigmoidGradient.Apply(SigmoidGradient, &zAugmented)
 
-		ndRows, ndCols := nextDelta.Dims()
-		delta = nextDelta.View(0, 1, ndRows, ndCols-1)
-		//delta = &nextDelta
+			nextDelta.Mul(delta, nn.Thetas[i])
+			nextDelta.MulElem(&nextDelta, &sigmoidGradient)
+
+			ndRows, ndCols := nextDelta.Dims()
+			delta = nextDelta.View(0, 1, ndRows, ndCols-1)
+			//delta = &nextDelta
+		}
 	}
 
 	//Theta2_grad = Theta2_grad / m;
@@ -271,44 +280,49 @@ func (nn *NeuralNet) newGradients() []Matrix {
 // The function returns a slice with the percent accuracy (from 0 to 1) of each corresponding training set
 func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, lambda float64, maxCost float64, minPercentAccuracy float64, maxIterations int) []float64 {
 	var percentAccuracies []float64
-	trainingInputs := inputs[0]
-	trainingExpected := expected[0]
-	for i := 0; i < maxIterations; i++ {
-		cost, grads := nn.CalculateCost(trainingInputs, trainingExpected, lambda)
-		fmt.Printf("Iteration %v - Cost: %v\n", i, cost)
+	//trainingInputs := inputs[0]
+	//trainingExpected := expected[0]
+	/*
+		for i := 0; i < maxIterations; i++ {
+			cost, grads := nn.CalculateCost(trainingInputs, trainingExpected, lambda)
+			fmt.Printf("Iteration %v - Cost: %v\n", i, cost)
 
-		if cost <= maxCost {
-			percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
-			accurate := true
-			for _, percent := range percentAccuracies {
-				if percent < minPercentAccuracy {
-					accurate = false
+			if cost <= maxCost {
+				percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
+				accurate := true
+				for _, percent := range percentAccuracies {
+					if percent < minPercentAccuracy {
+						accurate = false
+					}
 				}
-			}
-			fmt.Println("Accuracy: ", percentAccuracies)
-			if accurate {
-				break
+				fmt.Println("Accuracy: ", percentAccuracies)
+				if accurate {
+					break
+				}
+
 			}
 
+			for j, grad := range grads {
+				// TODO: optimize performance using ApplyFunc instead of MulElem?
+				gradRows, gradCols := grad.Dims()
+				alphaMatrix := NewForValue(gradRows, gradCols, alpha)
+				grad.MulElem(grad, alphaMatrix)
+				nn.Thetas[j].Sub(nn.Thetas[j], grad)
+			}
 		}
+	*/
 
-		for j, grad := range grads {
-			// TODO: optimize performance using ApplyFunc instead of MulElem?
-			gradRows, gradCols := grad.Dims()
-			alphaMatrix := NewForValue(gradRows, gradCols, alpha)
-			grad.MulElem(grad, alphaMatrix)
-			nn.Thetas[j].Sub(nn.Thetas[j], grad)
-		}
-	}
+	//ds := DataSet{nn, trainingInputs, trainingExpected}
+	//fx, count, err := ml.Fmincg(ds, lambda, maxIterations, true)
 
 	if percentAccuracies == nil {
-		percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
+		percentAccuracies = nn.CalculatePercentAccuracies(inputs, expected)
 	}
 
 	return percentAccuracies
 }
 
-func (nn *NeuralNet) calculatePercentAccuracies(inputs, expected []Matrix) []float64 {
+func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) []float64 {
 	percentAccuracies := make([]float64, len(inputs))
 	for i := 0; i < len(inputs); i++ {
 		inputData := inputs[i]
