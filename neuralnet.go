@@ -4,6 +4,9 @@ import (
 	"fmt"
 	//"github.com/alonsovidales/go_ml"
 	"github.com/gonum/matrix/mat64"
+	"io/ioutil"
+	"strconv"
+	"strings"
 )
 
 // TODO: make this more generic? Separate NN implementations for categorization vs. calculation?
@@ -334,8 +337,21 @@ func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) []flo
 		fmt.Println("Expected has: ", len(expectedResults), " actual has: ", len(results))
 
 		var tabulation [16][16]int
+		var avgScore [16][16]float64
 		for j := 0; j < len(results); j++ {
 			tabulation[expectedResults[j]][results[j]]++
+			for k := 0; k < 16; k++ {
+				avgScore[expectedResults[j]][k] += calculatedData.At(j, k)
+			}
+			//fmt.Println(calculatedData.RowView(j))
+			//fmt.Println("Expected: ", expectedResults[j], " was: ", results[j])
+		}
+		for j := 0; j < len(tabulation); j++ {
+			for k := 0; k < len(tabulation[j]); k++ {
+				if tabulation[j][k] > 0 {
+					avgScore[j][k] = avgScore[j][k] / float64(tabulation[j][k])
+				}
+			}
 			//fmt.Println(calculatedData.RowView(j))
 			//fmt.Println("Expected: ", expectedResults[j], " was: ", results[j])
 		}
@@ -343,6 +359,13 @@ func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) []flo
 		for j := 0; j < len(tabulation); j++ {
 			for k := 0; k < len(tabulation); k++ {
 				fmt.Print("\t", tabulation[j][k])
+			}
+			fmt.Print("\n")
+		}
+		fmt.Println("Scores: ")
+		for j := 0; j < len(avgScore); j++ {
+			for k := 0; k < len(avgScore); k++ {
+				fmt.Printf("\t%0.2f", avgScore[j][k])
 			}
 			fmt.Print("\n")
 		}
@@ -362,4 +385,89 @@ func PercentCorrect(expected, actual []int) float64 {
 	}
 	fmt.Printf("%v correct out of %v\n", correct, len(actual))
 	return float64(correct) / float64(len(actual))
+}
+
+// SaveThetas Store all the current theta values of the instance in the
+// "targetDir" directory.
+// This method will create a file for each layer of theta called theta_X.txt
+// where X is the layer contained on the file.
+func (nn *NeuralNet) SaveThetas(targetDir string) (files []string) {
+	fileCont := make([]string, len(nn.Thetas))
+	for i := 0; i < len(nn.Thetas); i++ {
+		thetaValues := MatrixToSlice(nn.Thetas[i])
+		for j := 0; j < len(thetaValues); j++ {
+			s := []string{}
+			for k := 0; k < len(thetaValues[j]); k++ {
+				s = append(s, strconv.FormatFloat(thetaValues[j][k], 'e', -1, 64))
+			}
+
+			fileCont[i] += strings.Join(s, " ") + "\n"
+		}
+	}
+
+	files = make([]string, len(nn.Thetas))
+	for i := 0; i < len(nn.Thetas); i++ {
+		files[i] = fmt.Sprintf("%s/theta_%d.txt", targetDir, i+1)
+		ioutil.WriteFile(
+			files[i],
+			[]byte(fileCont[i]),
+			0644)
+	}
+
+	return
+}
+
+// NewNeuralNetFromFiles Loads the informaton contained in the specified file
+// paths and returns a NeuralNet instance.
+// Each input file should contain a row by sample, and the values separated by a
+// single space.
+// To load the thetas specify on thetaSrc the file paths that contains each of
+// the layer values. The order of this paths will represent the order of the
+// layers.
+func NewNeuralNetFromFiles(thetaSrc []string) (result *NeuralNet) {
+	result = &NeuralNet{}
+
+	// Parse the Theta params
+	for _, thetaNSrc := range thetaSrc {
+		strInfo, err := ioutil.ReadFile(thetaNSrc)
+		if err != nil {
+			panic(err)
+		}
+
+		trainingData := strings.Split(string(strInfo), "\n")
+		theta := [][]float64{}
+		for _, line := range trainingData {
+			if line == "" {
+				break
+			}
+
+			var values []float64
+			for _, value := range strings.Split(line, " ") {
+				floatVal, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					panic(err)
+				}
+				values = append(values, floatVal)
+			}
+			theta = append(theta, values)
+		}
+
+		// TODO: make this a function or find a way to create a Dense without rolling/unrolling
+		rows := len(theta)
+		cols := len(theta[0])
+		flat := make([]float64, rows*cols)
+
+		idx := 0
+		for _, row := range theta {
+			for _, val := range row {
+				flat[idx] = val
+				idx++
+			}
+		}
+
+		thetaMatrix := mat64.NewDense(rows, cols, flat)
+		result.Thetas = append(result.Thetas, thetaMatrix)
+	}
+
+	return
 }
