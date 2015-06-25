@@ -3,10 +3,10 @@ package neuralnet
 import (
 	"bytes"
 	"fmt"
-	"log"
-	//"github.com/alonsovidales/go_ml"
+	"github.com/bigokro/go_ml"
 	"github.com/gonum/matrix/mat64"
 	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -283,48 +283,20 @@ func (nn *NeuralNet) newGradients() []Matrix {
 //
 // Training will change the Thetas of the neural net.
 // The function returns a slice with the percent accuracy (from 0 to 1) of each corresponding training set
-func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, lambda float64, maxCost float64, minPercentAccuracy float64, maxIterations int) []float64 {
-	var percentAccuracies []float64
-	//trainingInputs := inputs[0]
-	//trainingExpected := expected[0]
-	/*
-		for i := 0; i < maxIterations; i++ {
-			cost, grads := nn.CalculateCost(trainingInputs, trainingExpected, lambda)
-			log.Printf("Iteration %v - Cost: %v\n", i, cost)
+func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, lambda float64, maxCost float64, minPercentAccuracy float64, maxIterations int) (percentAccuracies []float64, percentAccurateByLabel []float64, scoreByLabel []float64) {
+	trainingInputs := inputs[0]
+	trainingExpected := expected[0]
 
-			if cost <= maxCost {
-				percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
-				accurate := true
-				for _, percent := range percentAccuracies {
-					if percent < minPercentAccuracy {
-						accurate = false
-					}
-				}
-				log.Println("Accuracy: ", percentAccuracies)
-				if accurate {
-					break
-				}
+	ds := DataSet{nn, trainingInputs, trainingExpected}
+	fx, i, err := ml.Fmincg(ds, lambda, maxIterations, true)
 
-			}
+	log.Println("Fx: ", fx)
+	log.Println("i: ", i)
+	log.Println("err: ", err)
 
-			for j, grad := range grads {
-				// TODO: optimize performance using ApplyFunc instead of MulElem?
-				gradRows, gradCols := grad.Dims()
-				alphaMatrix := NewForValue(gradRows, gradCols, alpha)
-				grad.MulElem(grad, alphaMatrix)
-				nn.Thetas[j].Sub(nn.Thetas[j], grad)
-			}
-		}
-	*/
+	percentAccuracies, percentAccurateByLabel, scoreByLabel = nn.CalculatePercentAccuracies(inputs, expected)
 
-	//ds := DataSet{nn, trainingInputs, trainingExpected}
-	//fx, count, err := ml.Fmincg(ds, lambda, maxIterations, true)
-
-	if percentAccuracies == nil {
-		percentAccuracies, _, _ = nn.CalculatePercentAccuracies(inputs, expected)
-	}
-
-	return percentAccuracies
+	return
 }
 
 func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) (percentAccuracies []float64, percentAccurateByLabel []float64, scoreByLabel []float64) {
