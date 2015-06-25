@@ -264,23 +264,35 @@ func TestCalculateCost(t *testing.T) {
 }
 
 func TestPercentCorrect(t *testing.T) {
-	expected := []int{1, 2, 3, 4, 5}
-	actual := []int{1, 2, 3, 4, 0}
+	expected := []int{1, 2, 3, 2, 3}
+	actual := []int{1, 2, 3, 2, 1}
 	expectedPercent := 0.80
-	actualPercent := PercentCorrect(expected, actual)
+	expectedPercentByLabel := []float64{0, 1, 1, 0.5}
+	actualPercent, actualPercentByLabel := PercentCorrect(4, expected, actual)
 	assertFloat64Equals(t, expectedPercent, actualPercent)
+	for i := 0; i < len(expectedPercentByLabel); i++ {
+		assertFloat64Equals(t, expectedPercentByLabel[i], actualPercentByLabel[i])
+	}
 
-	expected = []int{1, 2, 3, 4, 5, 6, 7}
-	actual = []int{1, 2, 3, 4, 0, 0, 7}
+	expected = []int{1, 2, 3, 1, 2, 3, 1}
+	actual = []int{1, 2, 3, 1, 1, 1, 1}
 	expectedPercent = 5.0 / 7.0
-	actualPercent = PercentCorrect(expected, actual)
+	expectedPercentByLabel = []float64{0, 1, 0.5, 0.5}
+	actualPercent, actualPercentByLabel = PercentCorrect(4, expected, actual)
 	assertFloat64Equals(t, expectedPercent, actualPercent)
+	for i := 0; i < len(expectedPercentByLabel); i++ {
+		assertFloat64Equals(t, expectedPercentByLabel[i], actualPercentByLabel[i])
+	}
 
-	expected = []int{1, 2, 3, 4, 5, 6, 7}
-	actual = []int{0, 0, 0, 0, 0, 0, 0}
+	expected = []int{1, 2, 3, 1, 2, 3, 1}
+	actual = []int{3, 1, 2, 3, 1, 2, 3}
 	expectedPercent = 0
-	actualPercent = PercentCorrect(expected, actual)
+	expectedPercentByLabel = []float64{0, 0, 0, 0}
+	actualPercent, actualPercentByLabel = PercentCorrect(4, expected, actual)
 	assertFloat64Equals(t, expectedPercent, actualPercent)
+	for i := 0; i < len(expectedPercentByLabel); i++ {
+		assertFloat64Equals(t, expectedPercentByLabel[i], actualPercentByLabel[i])
+	}
 }
 
 func TestChooseBest(t *testing.T) {

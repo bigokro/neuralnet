@@ -1,7 +1,9 @@
 package neuralnet
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	//"github.com/alonsovidales/go_ml"
 	"github.com/gonum/matrix/mat64"
 	"io/ioutil"
@@ -288,7 +290,7 @@ func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, la
 	/*
 		for i := 0; i < maxIterations; i++ {
 			cost, grads := nn.CalculateCost(trainingInputs, trainingExpected, lambda)
-			fmt.Printf("Iteration %v - Cost: %v\n", i, cost)
+			log.Printf("Iteration %v - Cost: %v\n", i, cost)
 
 			if cost <= maxCost {
 				percentAccuracies = nn.calculatePercentAccuracies(inputs, expected)
@@ -298,7 +300,7 @@ func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, la
 						accurate = false
 					}
 				}
-				fmt.Println("Accuracy: ", percentAccuracies)
+				log.Println("Accuracy: ", percentAccuracies)
 				if accurate {
 					break
 				}
@@ -319,32 +321,41 @@ func (nn *NeuralNet) Train(inputs []Matrix, expected []Matrix, alpha float64, la
 	//fx, count, err := ml.Fmincg(ds, lambda, maxIterations, true)
 
 	if percentAccuracies == nil {
-		percentAccuracies = nn.CalculatePercentAccuracies(inputs, expected)
+		percentAccuracies, _, _ = nn.CalculatePercentAccuracies(inputs, expected)
 	}
 
 	return percentAccuracies
 }
 
-func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) []float64 {
-	percentAccuracies := make([]float64, len(inputs))
+func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) (percentAccuracies []float64, percentAccurateByLabel []float64, scoreByLabel []float64) {
+	_, numLabels := expected[0].Dims()
+	percentAccuracies = make([]float64, len(inputs))
+	percentAccurateByLabel = make([]float64, numLabels)
+	scoreByLabel = make([]float64, numLabels)
+
 	for i := 0; i < len(inputs); i++ {
 		inputData := inputs[i]
 		expectedData := expected[i]
+
 		calculatedData := nn.Calculate(inputData)
 		results := ChooseBestFromEach(calculatedData)
 		expectedResults := ChooseBestFromEach(expectedData)
-		percentAccuracies[i] = PercentCorrect(expectedResults, results)
-		fmt.Println("Expected has: ", len(expectedResults), " actual has: ", len(results))
+		percentAccuracies[i], percentAccurateByLabel = PercentCorrect(numLabels, expectedResults, results)
 
-		var tabulation [16][16]int
-		var avgScore [16][16]float64
+		tabulation := make([][]int, numLabels)
+		for i, _ := range tabulation {
+			tabulation[i] = make([]int, numLabels)
+		}
+		avgScore := make([][]float64, numLabels)
+		for i, _ := range avgScore {
+			avgScore[i] = make([]float64, numLabels)
+		}
+
 		for j := 0; j < len(results); j++ {
 			tabulation[expectedResults[j]][results[j]]++
-			for k := 0; k < 16; k++ {
+			for k := 0; k < numLabels; k++ {
 				avgScore[expectedResults[j]][k] += calculatedData.At(j, k)
 			}
-			//fmt.Println(calculatedData.RowView(j))
-			//fmt.Println("Expected: ", expectedResults[j], " was: ", results[j])
 		}
 		for j := 0; j < len(tabulation); j++ {
 			for k := 0; k < len(tabulation[j]); k++ {
@@ -352,39 +363,49 @@ func (nn *NeuralNet) CalculatePercentAccuracies(inputs, expected []Matrix) []flo
 					avgScore[j][k] = avgScore[j][k] / float64(tabulation[j][k])
 				}
 			}
-			//fmt.Println(calculatedData.RowView(j))
-			//fmt.Println("Expected: ", expectedResults[j], " was: ", results[j])
 		}
-		fmt.Println("Tabulations: ")
+		log.Println("Tabulations: ")
 		for j := 0; j < len(tabulation); j++ {
+			var buffer bytes.Buffer
 			for k := 0; k < len(tabulation); k++ {
-				fmt.Print("\t", tabulation[j][k])
+				buffer.WriteString(fmt.Sprintf("\t%d", tabulation[j][k]))
 			}
-			fmt.Print("\n")
+			log.Println(buffer.String())
 		}
-		fmt.Println("Scores: ")
+		log.Println("Scores: ")
 		for j := 0; j < len(avgScore); j++ {
+			var buffer bytes.Buffer
 			for k := 0; k < len(avgScore); k++ {
-				fmt.Printf("\t%0.2f", avgScore[j][k])
+				buffer.WriteString(fmt.Sprintf("\t%0.2f", avgScore[j][k]))
 			}
-			fmt.Print("\n")
+			log.Println(buffer.String())
+			// TODO: take average of testing and validation results
+			scoreByLabel[j] = avgScore[j][j]
 		}
 
 	}
 
-	return percentAccuracies
+	return
 }
 
-func PercentCorrect(expected, actual []int) float64 {
+func PercentCorrect(numLabels int, expected, actual []int) (percentTotal float64, percentCorrectByLabel []float64) {
+	correctByLabel := make([]int, numLabels)
+	totalByLabel := make([]int, numLabels)
+	percentCorrectByLabel = make([]float64, numLabels)
 	correct := 0
 	for k, result := range actual {
-
+		totalByLabel[expected[k]]++
 		if result == expected[k] {
 			correct++
+			correctByLabel[expected[k]]++
 		}
 	}
-	fmt.Printf("%v correct out of %v\n", correct, len(actual))
-	return float64(correct) / float64(len(actual))
+	for i, correctForLabel := range correctByLabel {
+		percentCorrectByLabel[i] = float64(correctForLabel) / float64(totalByLabel[i])
+	}
+	log.Printf("%v correct out of %v\n", correct, len(actual))
+	percentTotal = float64(correct) / float64(len(actual))
+	return
 }
 
 // SaveThetas Store all the current theta values of the instance in the
